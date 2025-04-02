@@ -6,6 +6,7 @@ import Button from "react-bootstrap/Button";
 import InputGroup from "react-bootstrap/InputGroup";
 import Form from "react-bootstrap/Form";
 import { useEffect, useState } from "react";
+import { ethers } from "ethers";
 import "./style.css";
 
 const SenderTable = (props) => {
@@ -15,6 +16,7 @@ const SenderTable = (props) => {
   const { wallets, setWallets, isConnected } = props;
   const { currentPage, setCurrentPage } = useState(1);
   const [itemPerPage] = useState(5);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     indexOfLastItem = currentPage * itemPerPage;
@@ -25,17 +27,53 @@ const SenderTable = (props) => {
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
   };
-  const uploadWallet = async (e) => {
-    // setWallets(dummy);
-    const response = await fetch(process.env.PUBLIC_URL + "/wallets.csv");
-    const data = await response.text();
-    const dataArray = data.replace(/\s/g, "").split(",");
-    const resultArr = dataArray.filter((item) => item !== "");
-    setWallets(resultArr);
+
+  const validateEthereumAddress = (address) => {
+    try {
+      return ethers.isAddress(address);
+    } catch {
+      return false;
+    }
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setError("");
+    
+    try {
+      const text = await file.text();
+      const addresses = text
+        .split(/[\n,]/)
+        .map(addr => addr.trim())
+        .filter(addr => addr !== "");
+
+      // Validate addresses
+      const invalidAddresses = addresses.filter(addr => !validateEthereumAddress(addr));
+      
+      if (invalidAddresses.length > 0) {
+        setError(`Found ${invalidAddresses.length} invalid Ethereum addresses`);
+        return;
+      }
+
+      // Remove duplicates
+      const uniqueAddresses = [...new Set(addresses)];
+      
+      if (uniqueAddresses.length !== addresses.length) {
+        setError(`Removed ${addresses.length - uniqueAddresses.length} duplicate addresses`);
+      }
+
+      setWallets(uniqueAddresses);
+    } catch (error) {
+      console.error("Error processing file:", error);
+      setError("Error processing file. Please check the file format.");
+    }
   };
 
   return (
-    <div>
+    <div className="table-container">
+      {error && <div className="error-message">{error}</div>}
       <Table responsive>
         <thead>
           <tr>
@@ -44,55 +82,40 @@ const SenderTable = (props) => {
           </tr>
         </thead>
         <tbody>
-          {wallets && wallets.length > 0
-            ? wallets.map((e, idx) => {
-                return (
-                  <tr>
-                    <td>{idx + 1}</td>
-                    <td>{e}</td>
-                  </tr>
-                );
-              })
-            : "No data"}
+          {wallets && wallets.length > 0 ? (
+            wallets.map((address, idx) => (
+              <tr key={idx}>
+                <td>{idx + 1}</td>
+                <td>
+                  {address.slice(0, 6)}...{address.slice(-4)}
+                </td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan="2">No addresses loaded</td>
+            </tr>
+          )}
         </tbody>
       </Table>
 
-      {/* <Pagination>
-        {[
-          ...Array(Math.ceil(wallets && wallets.length / itemPerPage)).key(),
-        ].map(
-          // eslint-disable-next-line array-callback-return
-          (number) => {
-            <Pagination.Item
-              key={number + 1}
-              active={number + 1 === currentPage}
-              onClick={() => handlePageChange(number + 1)}
-            >
-              {number + 1}
-            </Pagination.Item>;
-          }
-        )}
-      </Pagination> */}
-
       <div className="tableButton">
-        <Button
-          className="uploadButton"
-          disabled={!isConnected}
-          onClick={uploadWallet}
-        >
-          Upload file
-        </Button>
-        {/* <InputGroup className="addButton">
-          <Form.Control
-            placeholder="New Wallet Address"
-            aria-label="Recipient's username"
-            aria-describedby="basic-addon2"
-            aria-disabled={!isConnected}
-          />
-          <Button variant="primary" id="button-addon2" disabled={!isConnected}>
-            Add
+        <input
+          type="file"
+          accept=".csv,.txt"
+          onChange={handleFileUpload}
+          style={{ display: 'none' }}
+          id="file-upload"
+        />
+        <label htmlFor="file-upload">
+          <Button
+            className="uploadButton"
+            disabled={!isConnected}
+            as="span"
+          >
+            Upload CSV File
           </Button>
-        </InputGroup> */}
+        </label>
       </div>
     </div>
   );

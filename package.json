@@ -11,7 +11,7 @@
     "bootstrap": "^5.3.3",
     "bs58": "^5.0.0",
     "cookie-parser": "^1.4.6",
-    "ethers": "^6.7.0",       
+    "ethers": "^6.7.0",
     "cors": "^2.8.5",
     "csv-parser": "^3.0.0",
     "csv-writer": "^1.6.0",
@@ -52,8 +52,8 @@
     "url": "^0.11.3"
   },
   "scripts": {
-    "start": "react-app-rewired start",
-    "build": "react-app-rewired build"
+    "start": "node api.js && react-app-rewired start",
+    "build": "node api.js && react-app-rewired build"
   },
   "eslintConfig": {
     "extends": [
