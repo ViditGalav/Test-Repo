@@ -10,63 +10,94 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import { Spinner } from "react-bootstrap";
 import { useEffect, useState } from "react";
 import { ethers } from "ethers";
-import { RPC_URL, SECRET_KEY } from "./config";
-
-// Load the sender's wallet from the private key
-const provider = new ethers.JsonRpcProvider(RPC_URL);
-const senderWallet = new ethers.Wallet(SECRET_KEY, provider);
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 function App() {
-  // State variables
-  const [isConnected, setIsConnected] = useState(false); // Connection state
-  const [tokenAddress, setTokenAddress] = useState("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // ERC-20 token contract address
-  const [wallets, setWallets] = useState([]); // List of recipient addresses
+  const [isConnected, setIsConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
-  const [quantity, setQuantity] = useState(0); // Tokens to send per wallet
-  const [fee, setFee] = useState(0); // Gas fee per transaction (not actively used for Ethereum)
+  const [tokenAddress, setTokenAddress] = useState("0xdAC17F958D2ee523a2206206994597C13D831ec7"); // USDT contract address
+  const [wallets, setWallets] = useState([]);
+  const [quantity, setQuantity] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [balanceAmount, setBalanceAmount] = useState(0); // Sender's token balance
+  const [balanceAmount, setBalanceAmount] = useState(0);
+  const [provider, setProvider] = useState(null);
+  const [signer, setSigner] = useState(null);
 
-  // Fetch token balance of the sender's wallet
   useEffect(() => {
-    if (tokenAddress) {
+    if (tokenAddress && isConnected && signer) {
       getTokenBalance();
     }
-  }, [tokenAddress]);
+  }, [tokenAddress, isConnected, signer]);
 
   const getTokenBalance = async () => {
     try {
+      if (!tokenAddress || !signer) return;
+
       const erc20ABI = [
         "function balanceOf(address account) external view returns (uint256)",
         "function decimals() view returns (uint8)",
       ];
-      const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, provider);
-      const decimals = await tokenContract.decimals();
-      const balance = await tokenContract.balanceOf(senderWallet.address);
+      
+      const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, signer);
+      
+      // Check if contract exists
+      const code = await signer.provider.getCode(tokenAddress);
+      if (code === "0x") {
+        toast.error("Invalid token contract address");
+        return;
+      }
+
+      // Get decimals with fallback
+      let decimals;
+      try {
+        decimals = await tokenContract.decimals();
+      } catch (error) {
+        console.log("Using default decimals (18)");
+        decimals = 18; // Most ERC20 tokens use 18 decimals
+      }
+
+      const balance = await tokenContract.balanceOf(walletAddress);
       setBalanceAmount(Number(ethers.formatUnits(balance, decimals)));
     } catch (error) {
       console.error("Error fetching token balance:", error);
-      alert("Failed to fetch token balance. Check the token address and try again.");
-    }
-  };
-
-  const handleConnect = async () => {
-    if (isConnected) {
-      const confirmDisconnect = window.confirm("Do you want to disconnect?");
-      if (confirmDisconnect) {
-        setIsConnected(false);
+      if (error.code === "BAD_DATA") {
+        toast.error("Invalid token contract or network issue");
+      } else {
+        toast.error("Failed to fetch token balance. Please check the token address and try again.");
       }
-    } else {
-      // Placeholder for future MetaMask logic
-      alert("Simulating wallet connection. MetaMask support coming soon.");
-      setIsConnected(true);
     }
   };
 
-  // Airdrop logic
+  const handleConnect = async (address) => {
+    try {
+      if (!window.ethereum) {
+        toast.error("Please install MetaMask to use this application!");
+        return;
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      
+      setProvider(provider);
+      setSigner(signer);
+      setWalletAddress(address);
+      setIsConnected(true);
+      toast.success("Wallet connected successfully!");
+    } catch (error) {
+      console.error("Error connecting wallet:", error);
+      toast.error("Failed to connect wallet. Please try again.");
+    }
+  };
+
   const handleAirdrop = async () => {
     if (!tokenAddress || wallets.length === 0 || quantity <= 0) {
-      alert("Please fill in all parameters correctly!");
+      toast.error("Please fill in all parameters correctly!");
+      return;
+    }
+
+    if (wallets.length * quantity > balanceAmount) {
+      toast.error("Insufficient token balance for airdrop!");
       return;
     }
 
@@ -76,21 +107,25 @@ function App() {
         "function transfer(address to, uint256 value) public returns (bool)",
         "function decimals() view returns (uint8)",
       ];
-      const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, senderWallet);
+      const tokenContract = new ethers.Contract(tokenAddress, erc20ABI, signer);
       const decimals = await tokenContract.decimals();
       const amount = ethers.parseUnits(quantity.toString(), decimals);
 
       for (let i = 0; i < wallets.length; i++) {
         const recipient = wallets[i];
-        console.log(`Transferring ${quantity} tokens to ${recipient}...`);
+        toast.info(`Transferring ${quantity} tokens to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`);
+        
         const tx = await tokenContract.transfer(recipient, amount);
-        await tx.wait(); // Wait for the transaction to confirm
-        console.log(`Successfully sent to ${recipient}`);
+        await tx.wait();
+        
+        toast.success(`Successfully sent to ${recipient.slice(0, 6)}...${recipient.slice(-4)}`);
       }
-      alert("Airdrop completed successfully!");
+      
+      toast.success("Airdrop completed successfully!");
+      await getTokenBalance(); // Refresh balance after airdrop
     } catch (error) {
       console.error("Airdrop failed:", error);
-      alert("Airdrop failed! Check the console for more details.");
+      toast.error(error.message || "Airdrop failed! Check the console for more details.");
     }
     setLoading(false);
   };
@@ -105,19 +140,18 @@ function App() {
           </div>
         )}
         <div className="connectWallet">
-          {/* Future MetaMask Connection: Placeholder */}
-          <div className="connectWallet">
           <ConnectWallet
             handleConnect={handleConnect}
             isConnected={isConnected}
+            walletAddress={walletAddress}
           />
         </div>
-          {/* <button className="btn btn-danger" disabled>
-            <h3>MetaMask (Coming Soon)</h3>
-          </button> */}
-        </div>
         <div className="event">
-          <SenderTable wallets={wallets} setWallets={setWallets} isConnected = {isConnected}/>
+          <SenderTable 
+            wallets={wallets} 
+            setWallets={setWallets} 
+            isConnected={isConnected}
+          />
         </div>
         <div className="main">
           <TokenPart
@@ -132,21 +166,16 @@ function App() {
             balanceAmount={balanceAmount}
           />
           <Fee
-            fee={fee}
-            setFee={setFee}
-            totalFee={wallets?.length ? wallets.length * fee : 0}
+            fee={0}
+            setFee={() => {}}
+            totalFee={0}
           />
         </div>
         <div className="airdrop">
           <Airdrop
-            isConnected={
-              isConnected && wallets?.length
-                ? wallets.length * quantity < balanceAmount
-                : 0
-            }
+            isConnected={isConnected && wallets?.length > 0}
             handleAirdrop={handleAirdrop}
           />
-          {/* <Airdrop handleAirdrop={handleAirdrop} isConnected={true} /> */}
         </div>
       </div>
     </div>

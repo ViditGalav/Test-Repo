@@ -1,11 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import Form from "react-bootstrap/Form";
 import InputGroup from "react-bootstrap/InputGroup";
 // import { toast } from "react-toastify";
-import { Alert } from "../Toast/Toast";
-import "./Transfer.css";
 // import axios from "axios";
 // import { API_URL } from "../config";
+import "./Transfer.css";
 
 const Transfer = (props) => {
   const { quantity, setQuantity, totalQuantity, balanceAmount } = props;
@@ -20,7 +19,7 @@ const Transfer = (props) => {
             aria-label="Large"
             aria-describedby="inputGroup-sizing-sm"
             type="number"
-            placeholder="input per quatity"
+            placeholder="input per quantity"
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
           />
@@ -40,7 +39,6 @@ const Transfer = (props) => {
             : totalQuantity}
         </h4>
       </div>
-      <Alert />
     </div>
   );
 };
